@@ -116,6 +116,31 @@ O `server.py` busca o MP3 em `https://translate.google.com/translate_tts?...` e 
 - Respostas são guardadas em cache no servidor (máx. 200 frases) para evitar requisições repetidas.
 - A reprodução automática depende da política de autoplay do navegador; se for bloqueada, clique no botão 🔊.
 
+## Tema do sistema
+
+O app usa as cores do tema Omarchy atual (arquivo `colors.toml`), e não apenas
+um modo escuro genérico. O hook
+`~/.config/omarchy/hooks/theme-set.d/anki-webapp-theme-sync` gera `theme.css` e
+`theme-meta.json` a cada troca de tema; `theme-sync.js` troca a folha de estilo
+em tempo real (sem recarregar a página) quando a geração muda.
+
+Para aplicar manualmente (ou após mover a pasta do app):
+
+```bash
+~/.config/omarchy/hooks/theme-set.d/anki-webapp-theme-sync
+```
+
+Se o app estiver em outro caminho, use `ANKI_WEBAPP_DIR=/caminho/do/app`.
+
+Uma cópia do hook está em `scripts/anki-webapp-theme-sync` para facilitar reinstalá-lo:
+
+```bash
+cp scripts/anki-webapp-theme-sync ~/.config/omarchy/hooks/theme-set.d/
+chmod +x ~/.config/omarchy/hooks/theme-set.d/anki-webapp-theme-sync
+```
+
+O `--muted` é derivado de `foreground` + `background` via `color-mix` em vez de usar o valor `muted` do `colors.toml`: alguns temas (como "Matte Black") definem um `muted` muito escuro, que deixava as abas inativas ilegíveis. Isso garante contraste legível em qualquer tema.
+
 ## Testes
 
 ```bash

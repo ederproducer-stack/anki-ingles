@@ -206,6 +206,23 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
 
+    def send_response(self, code, message=None):
+        super().send_response(code, message)
+        self._cache_control_sent = False
+
+    def send_header(self, keyword, value):
+        if keyword.lower() == "cache-control":
+            self._cache_control_sent = True
+        super().send_header(keyword, value)
+
+    def end_headers(self):
+        # Arquivos do app mudam com trocas de tema e edições; o navegador não
+        # deve servir versões antigas do index.html/CSS/JS. /tts já define seu
+        # próprio Cache-Control e fica de fora.
+        if not getattr(self, "_cache_control_sent", False):
+            self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
     def log_message(self, fmt, *args):
         path = args[1] if len(args) > 1 else ""
         if "/tts" in path or "/backup" in path:

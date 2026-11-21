@@ -10,8 +10,9 @@
 
   var BACKUP_FILE = 'anki-ingles-backup.json';
   var SOURCE_FILES = [
-    'index.html', 'style.css', 'app.js', 'srs.js', 'tts.js', 'deck.js',
-    'decks.js', 'backup.js', 'server.py', 'README.md',
+    'index.html', 'style.css', 'theme.css', 'theme-meta.json',
+    'app.js', 'srs.js', 'tts.js', 'deck.js', 'decks.js', 'backup.js',
+    'theme-sync.js', 'server.py', 'README.md',
     'favicon.svg', 'favicon.png', 'favicon.ico'
   ];
   var DB_NAME = 'anki-ingles-backup';

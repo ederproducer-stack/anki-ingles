@@ -1,0 +1,53 @@
+#!/bin/bash
+# Gera o CSS do webapp "Anki Inglês" a partir do tema Omarchy atual.
+# Instalado como hook theme-set: roda a cada troca de tema.
+# Sobrescreva o destino com ANKI_WEBAPP_DIR, se necessário.
+set -euo pipefail
+
+COLORS_FILE="${OMARCHY_THEME_COLORS:-$HOME/.local/state/omarchy/current/theme/colors.toml}"
+APP_DIR="${ANKI_WEBAPP_DIR:-$HOME/Work/anki-ingles}"
+
+if [[ ! -f $COLORS_FILE ]]; then
+  echo "anki-webapp-theme-sync: arquivo de cores não encontrado: $COLORS_FILE" >&2
+  exit 1
+fi
+
+color() { omarchy-theme-color --file "$COLORS_FILE" "$1" "$2"; }
+
+mode=$(color mode dark)
+bg=$(color background '#1b1b1b')
+fg=$(color foreground '#efebdc')
+accent=$(color accent '#e75a50')
+muted=$(color muted '#89856b')
+lighter=$(color lighter_background '#262626')
+darker=$(color darker_background '#141414')
+generation=$(cat "$HOME/.local/state/omarchy/current/theme.generation" 2>/dev/null || date +%s)
+
+if [[ $mode == dark ]]; then
+  shadow_alpha=0.45
+else
+  shadow_alpha=0.10
+fi
+
+cat >"$APP_DIR/theme.css" <<EOF
+/* Gerado por anki-webapp-theme-sync a partir do tema atual do Omarchy. Não editar à mão. */
+:root {
+  color-scheme: $mode;
+
+  --bg: $bg;
+  --surface: $lighter;
+  --surface-2: $darker;
+  --text: $fg;
+  --muted: color-mix(in srgb, $fg 62%, $bg);
+  --border: color-mix(in srgb, $fg 14%, transparent);
+
+  --primary: $accent;
+  --primary-hover: color-mix(in srgb, $accent 78%, $fg);
+  --primary-soft: color-mix(in srgb, $accent 18%, transparent);
+
+  --shadow: 0 12px 32px rgba(0, 0, 0, $shadow_alpha);
+}
+EOF
+
+printf '{"mode":"%s","generation":"%s","background":"%s","foreground":"%s","accent":"%s"}\n' \
+  "$mode" "$generation" "$bg" "$fg" "$accent" >"$APP_DIR/theme-meta.json"
