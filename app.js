@@ -991,6 +991,59 @@
       });
     };
 
+    $('btn-update-app').onclick = function () {
+      var btn = $('btn-update-app');
+      btn.disabled = true;
+      btn.textContent = 'Verificando...';
+      fetch('/update/check').then(function (res) { return res.json(); }).then(function (info) {
+        btn.disabled = false;
+        btn.textContent = 'Verificar atualizações';
+        if (!info.ok) throw new Error(info.error || 'Falha ao verificar');
+        $('update-status').textContent = 'Versão atual: ' + info.current;
+
+        var atualizado = info.behind === 0;
+        openModal(
+          '<h2>Atualizar do GitHub</h2>' +
+          '<p class="help">Versão instalada: <strong>' + esc(info.current) + '</strong></p>' +
+          '<p class="help">Versão no GitHub: <strong>' + esc(info.remote) + '</strong></p>' +
+          '<p class="help">' + (atualizado
+            ? 'Você já está na versão mais recente.'
+            : info.behind + ' commit(s) novo(s) disponível(is).') + '</p>' +
+          (info.blocking && info.blocking.length
+            ? '<p class="help" style="color:var(--again)">Arquivos modificados localmente impedem a atualização: ' +
+              esc(info.blocking.join(', ')) + '</p>'
+            : '') +
+          '<div class="modal-actions">' +
+            '<button id="update-cancel" class="btn btn-ghost">Fechar</button>' +
+            (atualizado || (info.blocking && info.blocking.length) ? '' :
+              '<button id="update-go" class="btn btn-primary">Atualizar agora</button>') +
+          '</div>'
+        );
+        $('update-cancel').onclick = closeModal;
+        if ($('update-go')) {
+          $('update-go').onclick = function () {
+            var go = $('update-go');
+            go.disabled = true;
+            go.textContent = 'Atualizando...';
+            fetch('/update', { method: 'POST' }).then(function (res) { return res.json(); }).then(function (r) {
+              if (!r.ok) throw new Error(r.error || 'Falha ao atualizar');
+              closeModal();
+              toast(r.serverChanged
+                ? 'Atualizado! O servidor será reiniciado em instantes.'
+                : 'Atualizado! Recarregando a página...');
+              setTimeout(function () { location.reload(); }, 1200);
+            }).catch(function (err) {
+              go.disabled = false;
+              go.textContent = 'Atualizar agora';
+              toast('Não foi possível atualizar: ' + err.message);
+            });
+          };
+        }
+      }).catch(function (err) {
+        toast('Não foi possível verificar: ' + err.message);
+      });
+    };
+
     $('btn-reset').onclick = function () {
       if (!confirm('Isso apaga TODOS os cartões e estatísticas do deck "' + deck().name + '". Continuar?')) return;
       deck().cards = SEED_DECK.map(function (item) {

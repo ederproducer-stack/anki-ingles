@@ -15,6 +15,7 @@ import json
 import os
 import shutil
 import socketserver
+import subprocess
 import sys
 import urllib.parse
 import urllib.request
@@ -42,6 +43,110 @@ USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36"
 )
+
+# Arquivos gerados localmente pelo hook de tema: podem ser descartados no update.
+GENERATED_FILES = {"theme.css", "theme-meta.json"}
+THEME_HOOK = os.path.expanduser(
+    "~/.config/omarchy/hooks/theme-set.d/anki-webapp-theme-sync"
+)
+
+
+def git(*args):
+    """Executa um comando git no diretório do app."""
+    try:
+        return subprocess.run(
+            ["git", "-C", ROOT, *args], capture_output=True, text=True, timeout=120
+        )
+    except Exception as exc:  # noqa: BLE001
+        return subprocess.CompletedProcess(args, 1, "", str(exc))
+
+
+def local_only(handler):
+    """Só permite atualizar o app a partir da própria máquina."""
+    return handler.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+
+
+def git_line(*args):
+    result = git(*args)
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def update_check():
+    """Busca alterações no GitHub e informa o que seria atualizado."""
+    fetch = git("fetch", "origin")
+    if fetch.returncode != 0:
+        raise RuntimeError("Falha ao consultar o GitHub: " + (fetch.stderr.strip() or "erro de rede"))
+
+    current = git_line("rev-parse", "HEAD")
+    remote = git_line("rev-parse", "origin/main")
+    if not current or not remote:
+        raise RuntimeError("Não foi possível ler os commits (o repo tem origin/main?)")
+
+    behind = git_line("rev-list", "--count", "%s..origin/main" % current) or "0"
+    dirty_raw = git_line("status", "--porcelain", "--untracked-files=no")
+    dirty = [line[3:] for line in dirty_raw.splitlines() if line]
+    blocking = [f for f in dirty if f not in GENERATED_FILES]
+    log = git_line("log", "-1", "--pretty=format:%h %ad %s", "--date=short", "origin/main")
+
+    return {
+        "current": git_line("log", "-1", "--pretty=format:%h %ad %s", "--date=short", "HEAD"),
+        "remote": log,
+        "behind": int(behind),
+        "dirty": dirty,
+        "blocking": blocking
+    }
+
+
+def update_apply():
+    """Aplica o git pull e retorna a lista de arquivos alterados."""
+    before = git_line("rev-parse", "HEAD")
+    dirty_raw = git_line("status", "--porcelain", "--untracked-files=no")
+    dirty = [line[3:] for line in dirty_raw.splitlines() if line]
+    blocking = [f for f in dirty if f not in GENERATED_FILES]
+    if blocking:
+        raise RuntimeError(
+            "Existem alterações locais em: " + ", ".join(blocking) +
+            ". Salve/reverta antes de atualizar."
+        )
+
+    # Descarta apenas os arquivos gerados pelo hook de tema.
+    generated = [f for f in dirty if f in GENERATED_FILES]
+    if generated:
+        git("checkout", "--", *generated)
+
+    pull = git("pull", "--ff-only", "origin", "main")
+    if pull.returncode != 0:
+        msg = (pull.stderr or pull.stdout or "erro desconhecido").strip()
+        raise RuntimeError("Falha no git pull: " + msg[-600:])
+
+    after = git_line("rev-parse", "HEAD")
+    changed = []
+    if before and after and before != after:
+        changed = git_line("diff", "--name-only", before, after).splitlines()
+
+    # Regera o tema caso os arquivos gerados tenham sido revertidos/alterados.
+    if os.path.isfile(THEME_HOOK):
+        try:
+            subprocess.run(["bash", THEME_HOOK], capture_output=True, timeout=60)
+        except Exception:  # noqa: BLE001
+            pass
+
+    server_changed = "server.py" in changed
+    if server_changed:
+        # Reinicia o serviço depois de responder, para o novo código carregar.
+        try:
+            subprocess.Popen(
+                ["bash", "-c", "sleep 2; systemctl --user restart anki-ingles.service"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+    return {
+        "changed": changed,
+        "serverChanged": server_changed,
+        "newVersion": git_line("log", "-1", "--pretty=format:%h %ad %s", "--date=short", "HEAD")
+    }
 
 _cache = {}
 _cache_max = 200
@@ -136,6 +241,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
 
+        if parsed.path == "/update/check":
+            if not local_only(self):
+                self.send_error(403)
+                return
+            try:
+                self._json({"ok": True, **update_check()})
+            except Exception as exc:  # noqa: BLE001
+                self._json({"ok": False, "error": str(exc)}, status=500)
+            return
+
         if parsed.path == "/backup/status":
             self._json({
                 "available": backup_available(),
@@ -180,11 +295,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path not in ("/backup/save", "/backup/move"):
+        if parsed.path not in ("/backup/save", "/backup/move", "/update"):
             self.send_error(404)
             return
 
         try:
+            if parsed.path == "/update":
+                if not local_only(self):
+                    self.send_error(403)
+                    return
+                self._json({"ok": True, **update_apply()})
+                return
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length).decode("utf-8"))
             if parsed.path == "/backup/move":
@@ -225,7 +346,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         path = args[1] if len(args) > 1 else ""
-        if "/tts" in path or "/backup" in path:
+        if "/tts" in path or "/backup" in path or "/update" in path:
             super().log_message(fmt, *args)
 
 
