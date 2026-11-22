@@ -423,6 +423,20 @@
     var list = cards().filter(function (c) {
       return c.front.toLowerCase().indexOf(query) >= 0 || c.back.toLowerCase().indexOf(query) >= 0;
     });
+    // Cartões novos (nunca avaliados) primeiro, com os mais recentes no topo.
+    var originalIndex = {};
+    cards().forEach(function (c, i) { originalIndex[c.id] = i; });
+    list.sort(function (a, b) {
+      var an = a.reps === 0 ? 0 : 1;
+      var bn = b.reps === 0 ? 0 : 1;
+      if (an !== bn) return an - bn;
+      if (an === 0) {
+        var byDate = (b.created || b.due) - (a.created || a.due);
+        // Desempate: cartões adicionados depois (índice maior) vêm primeiro.
+        return byDate !== 0 ? byDate : originalIndex[b.id] - originalIndex[a.id];
+      }
+      return 0; // preserva a ordem original entre cartões já estudados
+    });
     $('cards-count').textContent = list.length + (list.length === 1 ? ' cartão' : ' cartões') +
       ' no deck "' + deck().name + '" • ' + dueCount() + ' para hoje';
 
@@ -578,11 +592,15 @@
     var today = s.history[todayKey()] || { again: 0, hard: 0, good: 0, easy: 0 };
     var todayTotal = today.again + today.hard + today.good + today.easy;
     var learned = cards().filter(function (c) { return c.reps > 0; }).length;
+    var newToday = cards().filter(function (c) {
+      return todayKey(new Date(c.created || c.due)) === todayKey();
+    }).length;
     var accuracy = total ? Math.round(((total - (sumField('again'))) / total) * 100) : 0;
 
     var boxes = [
       ['Cartões no deck', cards().length],
       ['Para revisar hoje', dueCount()],
+      ['Cartões novos hoje', newToday],
       ['Cartões aprendidos', learned],
       ['Avaliações hoje', todayTotal],
       ['Avaliações no total', total],
