@@ -45,6 +45,7 @@ USER_AGENT = (
 )
 
 # Arquivos gerados localmente pelo hook de tema: podem ser descartados no update.
+VERSION_FILE = os.path.join(ROOT, "version.json")
 GENERATED_FILES = {"theme.css", "theme-meta.json"}
 THEME_HOOK = os.path.expanduser(
     "~/.config/omarchy/hooks/theme-set.d/anki-webapp-theme-sync"
@@ -59,6 +60,23 @@ def git(*args):
         )
     except Exception as exc:  # noqa: BLE001
         return subprocess.CompletedProcess(args, 1, "", str(exc))
+
+
+def version_info():
+    """Lê version.json; cai para o hash curto se o arquivo não existir."""
+    try:
+        with open(VERSION_FILE, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if data.get("version"):
+            return {
+                "label": "v" + str(data["version"]),
+                "version": str(data["version"]),
+                "notes": data.get("notes", "")
+            }
+    except Exception:  # noqa: BLE001
+        pass
+    return {"label": git_line("rev-parse", "--short", "HEAD") or "desconhecida",
+            "version": "", "notes": ""}
 
 
 def local_only(handler):
@@ -86,11 +104,25 @@ def update_check():
     dirty_raw = git_line("status", "--porcelain", "--untracked-files=no")
     dirty = [line[3:] for line in dirty_raw.splitlines() if line]
     blocking = [f for f in dirty if f not in GENERATED_FILES]
-    log = git_line("log", "-1", "--pretty=format:%h %ad %s", "--date=short", "origin/main")
+    # Versão legível do GitHub (lida direto do commit remoto).
+    remote_version = git_line("show", "origin/main:version.json")
+    remote_label = None
+    remote_notes = ""
+    if remote_version:
+        try:
+            data = json.loads(remote_version)
+            if data.get("version"):
+                remote_label = "v" + str(data["version"])
+                remote_notes = data.get("notes", "")
+        except Exception:  # noqa: BLE001
+            pass
+    if not remote_label:
+        remote_label = git_line("log", "-1", "--pretty=format:%h", "origin/main")
 
     return {
-        "current": git_line("log", "-1", "--pretty=format:%h %ad %s", "--date=short", "HEAD"),
-        "remote": log,
+        "current": version_info()["label"],
+        "remote": remote_label,
+        "remoteNotes": remote_notes,
         "behind": int(behind),
         "dirty": dirty,
         "blocking": blocking
@@ -242,10 +274,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
 
         if parsed.path == "/update/version":
-            self._json({
-                "ok": True,
-                "current": git_line("log", "-1", "--pretty=format:%h %ad %s", "--date=short", "HEAD")
-            })
+            info = version_info()
+            self._json({"ok": True, "current": info["label"], "notes": info["notes"]})
             return
 
         if parsed.path == "/update/check":

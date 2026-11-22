@@ -1005,20 +1005,30 @@
         $('update-status').textContent = 'Versão atual: ' + info.current;
 
         var atualizado = info.behind === 0;
+        var bloqueado = info.blocking && info.blocking.length;
+        var msg;
+        if (atualizado) {
+          msg = '<div class="update-badge ok">✓ Tudo em dia</div>' +
+            '<p class="update-text">Você já está usando a versão mais recente do app.</p>';
+        } else if (bloqueado) {
+          msg = '<div class="update-badge warn">Atenção</div>' +
+            '<p class="update-text">Existem alterações locais que impedem a atualização: ' +
+            esc(info.blocking.join(', ')) + '. Salve ou reverta antes de continuar.</p>';
+        } else {
+          msg = '<div class="update-badge new">Nova versão disponível</div>' +
+            '<p class="update-text">A versão <strong>' + esc(info.remote) + '</strong> está pronta para instalar.</p>' +
+            (info.remoteNotes ? '<p class="update-help">' + esc(info.remoteNotes) + '</p>' : '');
+        }
         openModal(
-          '<h2>Atualizar do GitHub</h2>' +
-          '<p class="help">Versão instalada: <strong>' + esc(info.current) + '</strong></p>' +
-          '<p class="help">Versão no GitHub: <strong>' + esc(info.remote) + '</strong></p>' +
-          '<p class="help">' + (atualizado
-            ? 'Você já está na versão mais recente.'
-            : info.behind + ' commit(s) novo(s) disponível(is).') + '</p>' +
-          (info.blocking && info.blocking.length
-            ? '<p class="help" style="color:var(--again)">Arquivos modificados localmente impedem a atualização: ' +
-              esc(info.blocking.join(', ')) + '</p>'
-            : '') +
+          '<h2>Atualizar o app</h2>' +
+          '<div class="update-card">' +
+            '<div><span>Versão instalada</span><strong>' + esc(info.current) + '</strong></div>' +
+            '<div><span>Versão disponível</span><strong>' + esc(info.remote) + '</strong></div>' +
+          '</div>' +
+          msg +
           '<div class="modal-actions">' +
             '<button id="update-cancel" class="btn btn-ghost">Fechar</button>' +
-            (atualizado || (info.blocking && info.blocking.length) ? '' :
+            (atualizado || bloqueado ? '' :
               '<button id="update-go" class="btn btn-primary">Atualizar agora</button>') +
           '</div>'
         );
