@@ -51,9 +51,10 @@
         break;
 
       case 'hard':
-        // Lembrou com esforço: avança pouco.
+        // Lembrou com esforço: avança pouco, mas ainda conta como revisão.
         c.interval = Math.max(1, Math.round((c.interval > 0 ? c.interval : 1) * 1.2));
         c.ef = clamp(c.ef - 0.15, MIN_EF, 2.5);
+        c.reps += 1;
         c.due = now + c.interval * DAY;
         break;
 

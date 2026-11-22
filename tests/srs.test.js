@@ -41,13 +41,22 @@ test('De novo zera as repetições, contabiliza lapse e volta para a fila', () =
   assert.ok(result.card.ef < 2.5);
 });
 
-test('Difícil avança pouco e reduz a facilidade', () => {
+test('Difícil avança pouco, reduz a facilidade e conta como revisão', () => {
   let c = SRS.newCard('id', 'Hi', 'Oi');
   c = SRS.schedule(c, 'good', NOW).card;
   const r = SRS.schedule(c, 'hard', NOW);
   assert.equal(r.requeue, false);
   assert.equal(r.card.interval, 1);
   assert.ok(r.card.ef < 2.5);
+  assert.equal(r.card.reps, 2, 'Difícil deve incrementar reps');
+});
+
+test('cartão marcado como Difícil sai da fase inicial no próximo Bom', () => {
+  let c = SRS.newCard('id', 'Hi', 'Oi');
+  c = SRS.schedule(c, 'hard', NOW).card;      // novo -> difícil
+  assert.equal(c.reps, 1);
+  c = SRS.schedule(c, 'good', NOW).card;      // próximo Bom
+  assert.equal(c.interval, 6, 'Bom após Difícil deve ir para 6 dias, não repetir 1 dia');
 });
 
 test('Fácil dá um salto maior e aumenta a facilidade', () => {
