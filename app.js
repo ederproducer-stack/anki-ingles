@@ -526,12 +526,42 @@
       document.execCommand(btn.getAttribute('data-cmd'), false, null);
       saveSelection();
     });
-    var color = toolbar.querySelector('input[data-color]');
-    color.addEventListener('mousedown', function () { saveSelection(); });
-    color.addEventListener('change', function () {
-      restoreSelection();
-      document.execCommand('foreColor', false, color.value);
+    // Aplica a cor diretamente na seleção, sem precisar focar o editor nem
+      // esperar o diálogo nativo do seletor de cores.
+    function applyColor(value) {
+      var sel = window.getSelection();
+      var range = savedRange;
+      if (range && editor.contains(range.commonAncestorContainer) && !range.collapsed) {
+        try {
+          var fragment = range.extractContents();
+          var span = document.createElement('span');
+          span.style.color = value;
+          span.appendChild(fragment);
+          range.insertNode(span);
+          var next = document.createRange();
+          next.selectNodeContents(span);
+          sel.removeAllRanges();
+          sel.addRange(next);
+          savedRange = next.cloneRange();
+          return;
+        } catch (err) { /* cai no fallback abaixo */ }
+      }
+      // Sem seleção de texto: aplica a cor para a próxima digitação.
+      editor.focus();
+      if (range) {
+        try { sel.removeAllRanges(); sel.addRange(range); } catch (err) { /* ignora */ }
+      }
+      document.execCommand('foreColor', false, value);
       saveSelection();
+    }
+
+    var color = toolbar.querySelector('input[data-color]');
+    color.addEventListener('mousedown', function () {
+      saveSelection();
+      applyColor(color.value); // cor atual já é aplicada ao clicar no quadrado
+    });
+    color.addEventListener('change', function () {
+      applyColor(color.value); // atualiza se o usuário escolher outra cor
     });
 
     editor.addEventListener('keydown', function (e) {
