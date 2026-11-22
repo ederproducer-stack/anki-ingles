@@ -241,6 +241,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
 
+        if parsed.path == "/update/version":
+            self._json({
+                "ok": True,
+                "current": git_line("log", "-1", "--pretty=format:%h %ad %s", "--date=short", "HEAD")
+            })
+            return
+
         if parsed.path == "/update/check":
             if not local_only(self):
                 self.send_error(403)

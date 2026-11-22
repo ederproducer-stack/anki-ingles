@@ -766,6 +766,9 @@
     $('btn-deck-delete').classList.toggle('hidden', Decks.getDecks().length <= 1);
     renderDeckSwitcher();
     renderBackupStatus();
+    fetch('/update/version').then(function (res) { return res.json(); }).then(function (info) {
+      if (info && info.ok && info.current) $('update-status').textContent = 'Versão instalada: ' + info.current;
+    }).catch(function () { /* servidor sem o endpoint: mantém o texto padrão */ });
   }
 
   function renderBackupStatus() {
