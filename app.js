@@ -306,8 +306,8 @@
   function renderCard(card) {
     var flashcard = $('flashcard');
     flashcard.classList.remove('flipped');
-    $('card-front').textContent = card.front;
-    $('card-back').textContent = card.back;
+    $('card-front').innerHTML = RichText.sanitize(card.front);
+    $('card-back').innerHTML = RichText.sanitize(card.back);
     $('card-meta').textContent = card.reps === 0
       ? '✨ Novo cartão'
       : 'Revisão ' + (card.reps + 1) + ' • intervalo atual: ' + intervalLabel(card.interval);
@@ -350,7 +350,7 @@
     var buttons = document.querySelectorAll('[data-speak]');
     for (var i = 0; i < buttons.length; i++) buttons[i].classList.add('playing');
 
-    TTS.speak(card.front, { lang: 'en', rate: settings().rate }).then(function (result) {
+    TTS.speak(RichText.strip(card.front), { lang: 'en', rate: settings().rate }).then(function (result) {
       for (var j = 0; j < buttons.length; j++) buttons[j].classList.remove('playing');
       if (result.via === 'blocked') {
         if (initialLoad) initialLoad = false;
@@ -421,7 +421,8 @@
   function renderCards() {
     var query = ($('card-search').value || '').toLowerCase().trim();
     var list = cards().filter(function (c) {
-      return c.front.toLowerCase().indexOf(query) >= 0 || c.back.toLowerCase().indexOf(query) >= 0;
+      return RichText.strip(c.front).toLowerCase().indexOf(query) >= 0 ||
+        RichText.strip(c.back).toLowerCase().indexOf(query) >= 0;
     });
     // Cartões novos (nunca avaliados) primeiro, com os mais recentes no topo.
     var originalIndex = {};
@@ -447,8 +448,8 @@
 
     $('cards-list').innerHTML = list.map(function (c) {
       return '<div class="card-row">' +
-        '<div class="en">' + esc(c.front) + '</div>' +
-        '<div class="pt">' + esc(c.back) + '</div>' +
+        '<div class="en">' + RichText.sanitize(c.front) + '</div>' +
+        '<div class="pt">' + RichText.sanitize(c.back) + '</div>' +
         '<span class="badge">' + (c.reps === 0 ? 'novo' : intervalLabel(c.interval)) + '</span>' +
         '<div class="row">' +
           '<button class="icon-btn" data-speak-card="' + esc(c.id) + '" title="Ouvir em inglês">🔊</button>' +
@@ -471,15 +472,92 @@
 
   function closeModal() { $('modal-root').innerHTML = ''; }
 
+  function editorToolbar(target) {
+    return '<div class="editor-toolbar" data-toolbar="' + target + '">' +
+      '<button type="button" data-cmd="bold" title="Negrito (Ctrl+B)"><b>B</b></button>' +
+      '<button type="button" data-cmd="italic" title="Itálico (Ctrl+I)"><i>I</i></button>' +
+      '<button type="button" data-cmd="underline" title="Sublinhado (Ctrl+U)"><u>U</u></button>' +
+      '<span class="toolbar-sep"></span>' +
+      '<label class="toolbar-color" title="Cor do texto">' +
+        '<input type="color" data-color="' + target + '" value="#e68e0d" /> Cor' +
+      '</label>' +
+      '<button type="button" data-cmd="removeFormat" title="Limpar formatação">⌫</button>' +
+    '</div>';
+  }
+
+  function bindEditor(editorId, toolbarId) {
+    var editor = $(editorId);
+    var toolbar = document.querySelector(toolbarId);
+    var savedRange = null;
+
+    function saveSelection() {
+      var sel = window.getSelection();
+      if (sel && sel.rangeCount && editor.contains(sel.anchorNode)) {
+        savedRange = sel.getRangeAt(0).cloneRange();
+      }
+    }
+    function restoreSelection() {
+      editor.focus();
+      if (savedRange) {
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(savedRange);
+      }
+    }
+
+    editor.addEventListener('mouseup', saveSelection);
+    editor.addEventListener('keyup', saveSelection);
+    editor.addEventListener('focus', function () {
+      if (!savedRange) {
+        var range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+        savedRange = range;
+      }
+    });
+
+    toolbar.addEventListener('mousedown', function (e) {
+      if (e.target.closest('button')) e.preventDefault(); // mantém a seleção
+    });
+    toolbar.addEventListener('click', function (e) {
+      var btn = e.target.closest('button[data-cmd]');
+      if (!btn) return;
+      restoreSelection();
+      document.execCommand(btn.getAttribute('data-cmd'), false, null);
+      saveSelection();
+    });
+    var color = toolbar.querySelector('input[data-color]');
+    color.addEventListener('mousedown', function () { saveSelection(); });
+    color.addEventListener('change', function () {
+      restoreSelection();
+      document.execCommand('foreColor', false, color.value);
+      saveSelection();
+    });
+
+    editor.addEventListener('keydown', function (e) {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      var k = e.key.toLowerCase();
+      if (k === 'b' || k === 'i' || k === 'u') {
+        e.preventDefault();
+        document.execCommand({ b: 'bold', i: 'italic', u: 'underline' }[k], false, null);
+      }
+    });
+  }
+
   function openCardModal(card) {
     var editing = !!card;
+    var frontHtml = RichText.sanitize(card ? card.front : '');
+    var backHtml = RichText.sanitize(card ? card.back : '');
     openModal(
       '<h2>' + (editing ? 'Editar cartão' : 'Novo cartão') + '</h2>' +
+      '<p class="help">Selecione uma palavra e use a barra para negrito, itálico, sublinhado ou cor.</p>' +
       '<form id="card-form">' +
-        '<div class="field"><label for="f-front">Frase em inglês 🇺🇸</label>' +
-          '<input id="f-front" class="input" value="' + esc(card ? card.front : '') + '" required /></div>' +
-        '<div class="field"><label for="f-back">Tradução em português 🇧🇷</label>' +
-          '<input id="f-back" class="input" value="' + esc(card ? card.back : '') + '" required /></div>' +
+        '<div class="field"><label>Frase em inglês 🇺🇸</label>' +
+          editorToolbar('front') +
+          '<div id="f-front" class="editor" contenteditable="true" data-placeholder="Ex.: I am <b>very</b> happy.">' + frontHtml + '</div></div>' +
+        '<div class="field"><label>Tradução em português 🇧🇷</label>' +
+          editorToolbar('back') +
+          '<div id="f-back" class="editor" contenteditable="true" data-placeholder="Ex.: Eu estou <i>muito</i> feliz.">' + backHtml + '</div></div>' +
         '<div class="field"><label for="f-notes">Observação (opcional)</label>' +
           '<input id="f-notes" class="input" value="' + esc(card ? card.notes : '') + '" /></div>' +
         '<button type="button" id="f-test" class="btn btn-ghost">🔊 Ouvir frase em inglês</button>' +
@@ -489,15 +567,22 @@
         '</div>' +
       '</form>'
     );
+    bindEditor('f-front', '.editor-toolbar[data-toolbar="front"]');
+    bindEditor('f-back', '.editor-toolbar[data-toolbar="back"]');
+    $('f-front').focus();
     $('f-cancel').onclick = closeModal;
     $('f-test').onclick = function () {
-      TTS.speak($('f-front').value || 'Hello world', { lang: 'en', rate: settings().rate });
+      TTS.speak(RichText.strip($('f-front').innerHTML) || 'Hello world', {
+        lang: 'en', rate: settings().rate
+      });
     };
     $('card-form').onsubmit = function (e) {
       e.preventDefault();
-      var front = $('f-front').value.trim();
-      var back = $('f-back').value.trim();
-      if (!front || !back) return toast('Preencha os dois lados do cartão.');
+      var front = RichText.sanitize($('f-front').innerHTML);
+      var back = RichText.sanitize($('f-back').innerHTML);
+      if (!RichText.strip(front) || !RichText.strip(back)) {
+        return toast('Preencha os dois lados do cartão.');
+      }
       var notes = $('f-notes').value.trim();
       var created = null;
       if (editing) {
@@ -743,7 +828,7 @@
       var speakId = e.target.getAttribute('data-speak-card');
       if (speakId) {
         var card = getCard(speakId);
-        if (card) TTS.speak(card.front, { lang: 'en', rate: settings().rate });
+        if (card) TTS.speak(RichText.strip(card.front), { lang: 'en', rate: settings().rate });
         return;
       }
       var editId = e.target.getAttribute('data-edit');
@@ -752,7 +837,7 @@
       if (delId) {
         var target = getCard(delId);
         if (!target) return;
-        if (!confirm('Excluir o cartão:\n"' + target.front + '"?')) return;
+        if (!confirm('Excluir o cartão:\n"' + RichText.strip(target.front) + '"?')) return;
         deck().cards = cards().filter(function (c) { return c.id !== delId; });
         save(); renderDeckSwitcher(); renderCards(); notifyCardsRemoved([delId]);
         toast('Cartão excluído.');

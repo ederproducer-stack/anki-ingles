@@ -40,6 +40,12 @@ Outras abas:
 - **Estatísticas**: cartões, revisões de hoje, precisão e gráfico dos últimos 7 dias.
 - **Configurações**: voz automática, velocidade, limites diários, modo livre e restauração do deck.
 
+## Formatação das frases
+
+Ao adicionar ou editar um cartão, os campos de frase são editores com formatação: selecione uma palavra e use a barra para aplicar **negrito**, *itálico*, <u>sublinhado</u>, cor ou limpar a formatação. Atalhos: `Ctrl+B`, `Ctrl+I`, `Ctrl+U`.
+
+O HTML é sanitizado antes de salvar (só negrito, itálico, sublinhado, cor e quebras são permitidos), e convertido em texto puro para a voz, a busca e as mensagens. Cartões antigos com texto simples continuam funcionando normalmente.
+
 ## Decks
 
 O seletor no topo da tabela mostra o deck ativo (com a quantidade de cartões) e o botão **+ Deck** cria outro. Em **Configurações → Deck atual** você pode renomear, importar e excluir decks.
