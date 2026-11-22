@@ -67,8 +67,9 @@
         break;
 
       case 'easy':
-        // Salto maior para quem já domina o cartão.
+        // Salto maior para quem já domina o cartão: sempre maior que "good".
         if (c.reps === 0) c.interval = 4;
+        else if (c.reps === 1) c.interval = Math.round(6 * 1.3);
         else c.interval = Math.max(1, Math.round(c.interval * c.ef * 1.3));
         c.ef = clamp(c.ef + 0.15, MIN_EF, MAX_EF);
         c.reps += 1;

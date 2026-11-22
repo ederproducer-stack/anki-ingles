@@ -58,6 +58,21 @@ test('Fácil dá um salto maior e aumenta a facilidade', () => {
   assert.equal(r.card.ef, 2.65);
 });
 
+test('Fácil sempre resulta em intervalo maior que Bom', () => {
+  // Estados: novo, após 1 Bom, após 2 Boms, após 3 Boms.
+  const estados = [
+    SRS.newCard('id', 'Hi', 'Oi'),
+    SRS.schedule(SRS.newCard('id', 'Hi', 'Oi'), 'good', NOW).card,
+    (() => { let c = SRS.newCard('id', 'Hi', 'Oi'); c = SRS.schedule(c, 'good', NOW).card; return SRS.schedule(c, 'good', NOW).card; })(),
+    (() => { let c = SRS.newCard('id', 'Hi', 'Oi'); for (let i = 0; i < 3; i++) c = SRS.schedule(c, 'good', NOW).card; return c; })()
+  ];
+  estados.forEach((card, i) => {
+    const bom = SRS.schedule(card, 'good', NOW).card.interval;
+    const facil = SRS.schedule(card, 'easy', NOW).card.interval;
+    assert.ok(facil > bom, `estado ${i}: fácil (${facil}) deve ser > bom (${bom})`);
+  });
+});
+
 test('a facilidade nunca desce abaixo de 1.3', () => {
   let c = SRS.newCard('id', 'Hi', 'Oi');
   c.ef = 1.3;
