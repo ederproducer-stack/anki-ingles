@@ -1,5 +1,9 @@
 {
   "version": "1.0.4",
   "released": "2026-11-22",
-  "notes": "Modal de atualização mais amigável e verificações de tema."
+  "notes": "Modal de atualização mais amigável e verificações de tema.",
+  "author": "Eder Oliveira",
+  "email": "ederproducer@gmail.com",
+  "repository": "https://github.com/ederproducer-stack/anki-ingles",
+  "license": "MIT"
 }

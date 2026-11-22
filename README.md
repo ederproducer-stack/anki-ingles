@@ -2,6 +2,8 @@
 
 Flashcards para treinar inglês no navegador, com a frase em inglês sendo lida em voz americana e a tradução em português brasileiro no outro lado do cartão.
 
+**Criado por [Eder Oliveira](mailto:ederproducer@gmail.com)** · ederproducer@gmail.com
+
 ## Como rodar
 
 Não precisa instalar nada (é HTML/CSS/JS puro). Basta servir a pasta com qualquer servidor estático:
