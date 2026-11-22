@@ -40,6 +40,14 @@ Outras abas:
 - **Estatísticas**: cartões, revisões de hoje, precisão e gráfico dos últimos 7 dias.
 - **Configurações**: voz automática, velocidade, limites diários, modo livre e restauração do deck.
 
+## Atualizar o app
+
+Em **Configurações → Atualizar do GitHub**, clique em **Verificar atualizações**: o app consulta o repositório e mostra a versão instalada e a versão mais recente. Se houver commits novos, clique em **Atualizar agora**.
+
+O servidor local executa `git pull --ff-only`, regenera o CSS do tema e recarrega a página automaticamente. Se `server.py` mudou, o serviço systemd é reiniciado sozinho.
+
+Seus cartões, estatísticas, deck ativo e backup em HD não são afetados — tudo fica no `localStorage` e no HD, fora do repositório. Se houver arquivos de código modificados localmente, a atualização é bloqueada para não perder trabalho (os arquivos gerados do tema são descartados com segurança).
+
 ## Formatação das frases
 
 Ao adicionar ou editar um cartão, os campos de frase são editores com formatação: selecione uma palavra e use a barra para aplicar **negrito**, *itálico*, <u>sublinhado</u>, cor ou limpar a formatação. Atalhos: `Ctrl+B`, `Ctrl+I`, `Ctrl+U`.
