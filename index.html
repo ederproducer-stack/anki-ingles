@@ -45,6 +45,12 @@
         </div>
       </div>
 
+      <div class="row wrap study-modes">
+        <button id="btn-listening" class="btn btn-ghost">Só ouvido</button>
+        <button id="btn-quiz" class="btn btn-ghost">Quiz</button>
+        <button id="btn-hard" class="btn btn-ghost">Mais Difíceis</button>
+      </div>
+
       <div class="progress"><div id="progress-bar" class="progress-bar"></div></div>
 
       <!-- Sem cartões para hoje -->
@@ -65,6 +71,7 @@
             <div class="card-face front">
               <div class="card-label">🇺🇸 INGLÊS</div>
               <div id="card-front" class="card-text"></div>
+              <div class="listening-hint" role="img" aria-label="Reproduzindo áudio"><i></i><i></i><i></i><i></i><i></i></div>
               <button class="speak-btn" data-speak title="Ouvir a frase (R)">
                 <span class="speak-icon">🔊</span> Ouvir frase
               </button>
@@ -79,6 +86,11 @@
               <div class="card-meta">Clique na nota abaixo para avaliar</div>
             </div>
           </div>
+        </div>
+
+        <div id="quiz-area" class="quiz-area hidden">
+          <div id="quiz-options" class="quiz-options"></div>
+          <div id="quiz-feedback" class="quiz-feedback"></div>
         </div>
 
         <div id="controls-front" class="controls">
@@ -116,8 +128,9 @@
         <div class="row wrap">
           <input id="card-search" class="input" type="search" placeholder="Buscar frase..." />
           <button id="btn-new" class="btn btn-primary">+ Novo</button>
-          <button id="btn-import" class="btn btn-ghost">Importar</button>
-          <button id="btn-export" class="btn btn-ghost">Exportar</button>
+          <button id="btn-csv-import" class="btn btn-ghost">Importar</button>
+          <button id="btn-csv-export" class="btn btn-ghost">Baixar</button>
+          <input id="csv-file" type="file" accept=".csv,text/csv,text/plain" class="hidden" />
         </div>
       </div>
       <div id="cards-list" class="cards-list"></div>
@@ -127,8 +140,27 @@
     <section id="screen-stats" class="screen">
       <h2>Estatísticas</h2>
       <div id="stat-cards" class="stat-grid"></div>
-      <h3>Últimos 7 dias</h3>
-      <div id="chart" class="chart"></div>
+
+      <div class="section-head chart-head">
+        <h3>Últimos 7 dias</h3>
+        <span id="chart-total" class="chart-badge"></span>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-grid">
+          <div class="chart-y"><span id="chart-ymax"></span><span>0</span></div>
+          <div class="chart-body">
+            <div class="chart-lines"><i></i><i></i><i></i></div>
+            <div id="chart" class="chart"></div>
+          </div>
+        </div>
+        <div class="chart-legend">
+          <span><i class="dot dot-total"></i>Total revisados</span>
+          <span><i class="dot dot-hits"></i>Acertos (Bom/Fácil)</span>
+        </div>
+      </div>
+
+      <h3>Distribuição dos Cartões</h3>
+      <div id="card-distribution" class="distribution"></div>
     </section>
 
     <!-- ===================== CONFIGURAÇÕES ===================== -->
@@ -219,14 +251,20 @@
             </div>
           </div>
         </div>
+
+        <div class="setting about-setting">
+          <div>
+            <strong>Anki Inglês</strong>
+            <small>Flashcards para treinar inglês no navegador: a frase aparece em inglês com voz americana e a tradução em português no verso. A repetição espaçada decide quando revisar cada cartão, e seus dados ficam no navegador e no backup local.</small>
+            <p class="about-credits">
+              Criado por <a href="mailto:ederproducer@gmail.com">Eder Oliveira</a> ·
+              <a href="https://github.com/ederproducer-stack/anki-ingles" target="_blank" rel="noopener">código no GitHub</a>
+            </p>
+          </div>
+        </div>
       </div>
     </section>
   </main>
-
-  <footer class="app-footer">
-    Criado por <a href="mailto:ederproducer@gmail.com">Eder Oliveira</a> ·
-    <a href="https://github.com/ederproducer-stack/anki-ingles" target="_blank" rel="noopener">código no GitHub</a>
-  </footer>
 
   <div id="toast" class="toast" aria-live="polite"></div>
   <div id="modal-root"></div>
@@ -234,6 +272,10 @@
   <script src="richtext.js"></script>
   <script src="tts.js"></script>
   <script src="srs.js"></script>
+  <script src="csv.js"></script>
+  <script src="stats.js"></script>
+  <script src="quiz.js"></script>
+  <script src="importtext.js"></script>
   <script src="deck.js"></script>
   <script src="decks.js"></script>
   <script src="backup.js"></script>

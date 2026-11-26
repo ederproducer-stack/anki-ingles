@@ -37,10 +37,43 @@ python3 server.py 8080
 4. A repetição espaçada é uma versão simplificada do SM-2 (o algoritmo do Anki): `De novo` volta o cartão para a mesma sessão; `Bom` segue 1 dia → 6 dias → intervalo × facilidade.
 
 Outras abas:
-- **Cartões**: adicionar, editar, excluir, buscar, importar e exportar.
-  - Importar aceita linhas no formato `inglês :: português` (ou separadas por tab).
-- **Estatísticas**: cartões, revisões de hoje, precisão e gráfico dos últimos 7 dias.
-- **Configurações**: voz automática, velocidade, limites diários, modo livre e restauração do deck.
+- **Cartões**: adicionar, editar, excluir (com **Desfazer** no aviso), buscar e trocar cartões com planilhas.
+  - **Importar** abre a colagem inteligente de frases (ou escolha de CSV); **Baixar** gera o CSV (veja abaixo).
+- **Estatísticas**: retenção, sequência de dias, memorizados, total de cartões, gráfico dos últimos 7 dias (com acertos) e distribuição dos cartões.
+- **Configurações**: voz automática, velocidade, limites diários, modo livre, backup, atualização e um bloco com descrição e créditos do app.
+
+## Modos de treino
+
+Na tela **Revisar**, os botões acima do cartão ativam modos exclusivos — só um fica destacado por vez; clique de novo no mesmo para voltar ao modo normal:
+
+- **Só ouvido**: a frase em inglês fica oculta até o áudio terminar de tocar — tente entender só pela escuta. Se o navegador bloquear ou não houver áudio, ela aparece na hora para não travar o cartão.
+- **Quiz**: quatro alternativas em português, formadas pelas traduções de outros cartões do mesmo deck. Acerto conta como *Bom*; erro conta como *De novo* e mostra a resposta. As teclas `1`–`4` escolhem as opções.
+- **Mais Difíceis**: reúne só os cartões em que você mais errou (mais repetições perdidas e menor facilidade), ignorando as datas de revisão. Um cartão sai do filtro quando vira bem memorizado (intervalo de 21 dias), mesmo tendo errado antes. O número no botão mostra quantos cartões entram nesse filtro e atualiza a cada avaliação.
+
+As alternativas vêm dos próprios cartões e a voz usa o áudio em cache do servidor local — os modos funcionam sem internet.
+
+## Colar uma lista de frases
+
+Em **Cartões → Importar**, cole uma lista simples — não precisa montar planilha. A prévia aparece antes de adicionar. Aceito:
+
+- `How are you? :: Como vai?` (também tab, `-`, `→`, `|`, `=`, `:` e `;`);
+- frases em linhas alternadas (inglês, português);
+- marcadores de lista (`-`, `•`, `1.`), aspas e comentários com `#`;
+- ordem invertida (`Você está bem? :: Are you okay?`) é corrigida automaticamente.
+
+Linhas sem par são ignoradas e contadas na prévia, e frases repetidas no deck não são adicionadas de novo. O mesmo modal tem **Escolher arquivo CSV** para quem já usa planilha.
+
+## Importar e baixar em CSV
+
+Na aba **Cartões**, **Baixar** gera `anki-ingles-cartoes-AAAA-MM-DD.csv` (UTF-8 com BOM, para abrir no Excel) com as colunas `front,back,notes` — frente em inglês, verso em português e notas. A formatação rica é convertida em texto puro; para preservar negrito/itálico/cor, use o backup ZIP.
+
+**Importar** escolhe um arquivo `.csv` e mostra quantos cartões foram encontrados. Você pode **Adicionar** ao deck atual ou **Substituir** todos os cartões dele (com confirmação). O delimitador é detectado automaticamente entre vírgula, ponto e vírgula (comum no Excel em português) e tab. Cabeçalhos em português (`Inglês,Português,Notas`) ou inglês (`front,back,notes`) são reconhecidos, assim como aspas escapadas, quebras de linha dentro de campos e BOM. Linhas sem frente ou verso são ignoradas; o progresso de estudo dos cartões importados recomeça do zero.
+
+## Estatísticas
+
+Os cartões do painel usam: **Retenção** = acertos (Bom/Fácil) sobre o total de revisões; **Sequência** = dias consecutivos com revisão (terminando hoje ou ontem), com as revisões de hoje em relação ao limite diário; **Memorizados** = cartões com intervalo de 21 dias ou mais; **Total de Cartões** = quantos cartões há no deck e quantos estão para revisar.
+
+O gráfico dos últimos 7 dias mostra o total de revisões (azul) e os acertos (verde) de cada dia. A distribuição separa os cartões em novos (ainda não revisados), em estudo e bem memorizados.
 
 ## Atualizar o app
 

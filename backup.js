@@ -11,7 +11,7 @@
   var BACKUP_FILE = 'anki-ingles-backup.json';
   var SOURCE_FILES = [
     'index.html', 'style.css', 'theme.css', 'theme-meta.json',
-    'app.js', 'srs.js', 'tts.js', 'richtext.js', 'deck.js', 'decks.js', 'backup.js',
+    'app.js', 'srs.js', 'csv.js', 'stats.js', 'quiz.js', 'importtext.js', 'tts.js', 'richtext.js', 'deck.js', 'decks.js', 'backup.js',
     'theme-sync.js', 'server.py', 'README.md', 'LICENSE', 'version.json',
     'favicon.svg', 'favicon.png', 'favicon.ico'
   ];

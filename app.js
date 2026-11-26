@@ -22,12 +22,24 @@
       String(d.getDate()).padStart(2, '0');
   }
 
-  function toast(message) {
+  function hideToast() { $('toast').classList.remove('show'); }
+
+  function toast(message, action) {
     var el = $('toast');
-    el.textContent = message;
+    el.textContent = '';
+    el.appendChild(document.createTextNode(message));
+    el.classList.toggle('has-action', !!action);
+    if (action) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'toast-action';
+      btn.textContent = action.label;
+      btn.onclick = function () { action.onClick(); hideToast(); };
+      el.appendChild(btn);
+    }
     el.classList.add('show');
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2600);
+    toastTimer = setTimeout(hideToast, action ? 6000 : 2600);
   }
 
   function globalBackup() { return typeof Backup !== 'undefined' ? Backup : null; }
@@ -186,29 +198,41 @@
 
   /* ------------------ Sessão de estudo ------------------ */
 
-  function startSession(free, silent) {
+  function startSession(free, silent, opts) {
+    opts = opts || {};
     var now = Date.now();
-    var eligible = cards().filter(function (c) { return free || c.due <= now; });
+    var eligible;
 
-    if (!free) {
-      var reviews = eligible.filter(function (c) { return c.reps > 0; });
-      var fresh = eligible.filter(function (c) { return c.reps === 0; })
-        .slice(0, settings().newPerDay);
-      eligible = reviews.concat(fresh);
+    if (opts.hardOnly) {
+      eligible = Stats.hardCards(cards(), settings().dailyLimit);
+    } else {
+      eligible = cards().filter(function (c) { return free || c.due <= now; });
+      if (!free) {
+        var reviews = eligible.filter(function (c) { return c.reps > 0; });
+        var fresh = eligible.filter(function (c) { return c.reps === 0; })
+          .slice(0, settings().newPerDay);
+        eligible = reviews.concat(fresh);
+        eligible.sort(function (a, b) { return a.due - b.due; });
+      }
     }
 
-    eligible.sort(function (a, b) { return a.due - b.due; });
     var queue = eligible.slice(0, settings().dailyLimit).map(function (c) {
       return { id: c.id, again: 0 };
     });
 
+    clearListeningTimer();
     session = {
       queue: queue,
       done: 0,
       counts: { again: 0, hard: 0, good: 0, easy: 0 },
       free: !!free,
-      silent: !!silent
+      silent: !!silent,
+      listening: !!opts.listening,
+      quiz: !!opts.quiz,
+      hardOnly: !!opts.hardOnly,
+      quizTimer: null
     };
+    updateModeButtons();
 
     $('session-summary').classList.add('hidden');
     $('study-empty').classList.add('hidden');
@@ -219,10 +243,33 @@
     nextCard();
   }
 
+  function startMode(flag) {
+    var wasActive = !!(session && session[flag]);
+    var opts = { listening: false, quiz: false, hardOnly: false };
+    if (!wasActive) opts[flag] = true;
+    startSession(settings().free, false, opts);
+  }
+
+  function updateModeButtons() {
+    var s = session || {};
+    $('btn-free').classList.toggle('mode-active', !!s.free);
+    $('btn-free').classList.toggle('free-active', !!s.free);
+    $('btn-free').setAttribute('aria-pressed', s.free ? 'true' : 'false');
+    $('btn-listening').classList.toggle('mode-active', !!s.listening);
+    $('btn-quiz').classList.toggle('mode-active', !!s.quiz);
+    $('btn-hard').classList.toggle('mode-active', !!s.hardOnly);
+    $('btn-hard').textContent = 'Mais Difíceis (' + Stats.hardCards(cards(), 999).length + ')';
+  }
+
+  function clearListeningTimer() {
+    $('flashcard').classList.remove('listening');
+  }
+
   /* Mantém a sessão ativa sincronizada quando cartões são adicionados/removidos,
      sem exigir recarregar a página. */
   function refreshSessionHeader() {
     if (!session) return;
+    updateModeButtons();
     var remaining = session.queue.length;
     $('study-title').textContent = remaining + (remaining === 1 ? ' cartão restante' : ' cartões restantes');
     $('study-sub').textContent = session.free
@@ -254,7 +301,27 @@
     refreshSessionHeader();
   }
 
+  function undoDelete(deckId, index, card) {
+    var original = null;
+    Decks.getDecks().forEach(function (d) {
+      if (d.id === deckId) original = d;
+    });
+    if (!original) return;
+    original.cards.splice(Math.min(index, original.cards.length), 0, card);
+    if (deck().id === deckId) {
+      save();
+      renderDeckSwitcher(); renderCards();
+      notifyCardsAdded([card.id]);
+      syncAudios();
+    } else {
+      Decks.save();
+    }
+    toast('Cartão restaurado.');
+  }
+
   function showEmpty() {
+    clearListeningTimer();
+    updateModeButtons();
     $('study-area').classList.add('hidden');
     $('study-empty').classList.remove('hidden');
     $('btn-end').classList.add('hidden');
@@ -265,9 +332,13 @@
     var next = cards()
       .filter(function (c) { return c.due > Date.now(); })
       .sort(function (a, b) { return a.due - b.due; })[0];
-    $('empty-message').textContent = next
-      ? 'Próxima revisão: ' + formatDue(next.due) + '. Quer praticar mesmo assim?'
-      : 'Você ainda não tem cartões. Adicione uma frase para começar.';
+    if (session && session.hardOnly) {
+      $('empty-message').textContent = 'Nenhum cartão difícil por enquanto. Continue revisando!';
+    } else {
+      $('empty-message').textContent = next
+        ? 'Próxima revisão: ' + formatDue(next.due) + '. Quer praticar mesmo assim?'
+        : 'Você ainda não tem cartões. Adicione uma frase para começar.';
+    }
   }
 
   function formatDue(due) {
@@ -305,6 +376,7 @@
 
   function renderCard(card) {
     var flashcard = $('flashcard');
+    clearListeningTimer();
     flashcard.classList.remove('flipped');
     $('card-front').innerHTML = RichText.sanitize(card.front);
     $('card-back').innerHTML = RichText.sanitize(card.back);
@@ -312,7 +384,9 @@
       ? '✨ Novo cartão'
       : 'Revisão ' + (card.reps + 1) + ' • intervalo atual: ' + intervalLabel(card.interval);
 
-    $('controls-front').classList.remove('hidden');
+    if (session.quiz) renderQuiz(card);
+    else $('quiz-area').classList.add('hidden');
+    $('controls-front').classList.toggle('hidden', !!session.quiz);
     $('controls-back').classList.add('hidden');
 
     $('int-again').textContent = SRS.formatInterval(card, 'again');
@@ -322,21 +396,81 @@
 
     var remaining = session.queue.length;
     $('study-title').textContent = remaining + (remaining === 1 ? ' cartão restante' : ' cartões restantes');
-    $('study-sub').textContent = session.free
-      ? 'Modo livre — praticando todos os cartões'
-      : 'Revisão do dia • ' + dueCount() + ' disponíveis no total';
+    var modes = [];
+    if (session.hardOnly) modes.push('Mais difíceis');
+    if (session.quiz) modes.push('Quiz');
+    if (session.listening) modes.push('Só ouvido');
+    if (modes.length) {
+      $('study-sub').textContent = modes.join(' + ') + (session.free ? ' • modo livre' : '');
+    } else {
+      $('study-sub').textContent = session.free
+        ? 'Modo livre — praticando todos os cartões'
+        : 'Revisão do dia • ' + dueCount() + ' disponíveis no total';
+    }
 
     var done = session.done;
     var pct = Math.round((done / (done + remaining)) * 100);
     $('progress-bar').style.width = pct + '%';
 
-    if (settings().autoplay && !session.silent) speakCurrent();
+    if (session.listening) {
+      if (!session.silent) {
+        flashcard.classList.add('listening');
+        speakCurrent(function (result, cardId) {
+          // Só revela quando o áudio termina (ou quando não há como tocar).
+          var now = currentCard();
+          if (now && now.id === cardId) clearListeningTimer();
+        });
+      }
+    } else if (settings().autoplay && !session.silent) {
+      speakCurrent();
+    }
+  }
+
+  function renderQuiz(card) {
+    var rows = cards().map(function (c) {
+      return { id: c.id, back: RichText.strip(c.back) };
+    });
+    var options = Quiz.makeOptions(rows, { id: card.id, back: RichText.strip(card.back) }, 4);
+    session.quizOptions = options;
+    $('quiz-options').innerHTML = options.map(function (o, i) {
+      return '<button type="button" class="quiz-option" data-index="' + i + '">' +
+        '<kbd>' + (i + 1) + '</kbd>' + esc(o.text) + '</button>';
+    }).join('');
+    $('quiz-feedback').textContent = '';
+    $('quiz-area').classList.remove('hidden');
+    $('quiz-options').onclick = function (e) {
+      var btn = e.target.closest('.quiz-option');
+      if (btn) answerQuiz(Number(btn.getAttribute('data-index')), options);
+    };
+  }
+
+  function answerQuiz(index, options) {
+    if (!session || !session.quiz || !options[index]) return;
+    var chosen = options[index];
+    var buttons = $('quiz-options').querySelectorAll('.quiz-option');
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].disabled = true;
+      if (options[i].correct) buttons[i].classList.add('correct');
+      else if (i === index) buttons[i].classList.add('wrong');
+    }
+    var right = options.filter(function (o) { return o.correct; })[0];
+    $('quiz-feedback').textContent = chosen.correct
+      ? 'Correto!'
+      : 'Resposta correta: ' + (right ? right.text : '');
+    clearListeningTimer();
+    session.quizOptions = null;
+    if (session.quizTimer) clearTimeout(session.quizTimer);
+    session.quizTimer = setTimeout(function () {
+      session.quizTimer = null;
+      rate(chosen.correct ? 'good' : 'again');
+    }, 1100);
   }
 
   function flip() {
     var card = currentCard();
     if (!card) return;
     session.silent = false; // interação explícita: autoplay volta a valer
+    clearListeningTimer();
     var flashcard = $('flashcard');
     var flipped = flashcard.classList.toggle('flipped');
     $('controls-front').classList.toggle('hidden', flipped);
@@ -344,9 +478,10 @@
     if (flipped && settings().autoplay) speakCurrent();
   }
 
-  function speakCurrent() {
+  function speakCurrent(onDone) {
     var card = currentCard();
-    if (!card) return;
+    if (!card) { if (onDone) onDone({ ok: false, via: 'none' }, null); return; }
+    var cardId = card.id;
     var buttons = document.querySelectorAll('[data-speak]');
     for (var i = 0; i < buttons.length; i++) buttons[i].classList.add('playing');
 
@@ -358,6 +493,7 @@
       } else if (!result.ok && result.via !== 'stopped') {
         toast('Não foi possível reproduzir a voz. Verifique o som do navegador.');
       }
+      if (onDone) onDone(result, cardId);
     });
   }
 
@@ -381,14 +517,18 @@
     }
 
     save();
+    updateModeButtons();
     nextCard();
   }
 
   function finishSession(manual) {
     TTS.stop();
+    if (session && session.quizTimer) clearTimeout(session.quizTimer);
+    clearListeningTimer();
     var counts = session ? session.counts : { again: 0, hard: 0, good: 0, easy: 0 };
     var reviewed = counts.again + counts.hard + counts.good + counts.easy;
     session = null;
+    updateModeButtons();
 
     $('study-area').classList.add('hidden');
     $('study-empty').classList.add('hidden');
@@ -627,37 +767,6 @@
     };
   }
 
-  function openImportModal() {
-    openModal(
-      '<h2>Importar frases</h2>' +
-      '<p class="help">Uma frase por linha, no formato <strong>inglês :: português</strong> (ou separado por tab).</p>' +
-      '<div class="field"><textarea id="import-text" placeholder="Could you help me? :: Você pode me ajudar?\nI am tired. :: Eu estou cansado."></textarea></div>' +
-      '<div class="modal-actions">' +
-        '<button id="import-cancel" class="btn btn-ghost">Cancelar</button>' +
-        '<button id="import-go" class="btn btn-primary">Importar</button>' +
-      '</div>'
-    );
-    $('import-cancel').onclick = closeModal;
-    $('import-go').onclick = function () {
-      var lines = $('import-text').value.split(/\r?\n/);
-      var ids = [];
-      lines.forEach(function (line) {
-        var parts = line.indexOf('\t') >= 0 ? line.split('\t') : line.split('::');
-        if (parts.length < 2) return;
-        var front = parts[0].trim();
-        var back = parts.slice(1).join('::').trim();
-        if (!front || !back) return;
-        var created = SRS.newCard(uid(), front, back, '');
-        cards().push(created);
-        ids.push(created.id);
-      });
-      if (!ids.length) return toast('Nenhuma frase válida encontrada. Use: inglês :: português');
-      save(); closeModal(); renderDeckSwitcher(); renderCards();
-      notifyCardsAdded(ids);
-      toast(ids.length + (ids.length === 1 ? ' cartão importado!' : ' cartões importados!'));
-    };
-  }
-
   function exportCards() {
     if (!globalBackup()) return;
     globalBackup().download({ cards: deck().cards, settings: settings(), stats: deck().stats })
@@ -665,6 +774,145 @@
         toast('Backup baixado: ZIP com JSON, arquivos e ' + n + ' áudio(s).');
       })
       .catch(function (err) { toast('Falha ao baixar: ' + err.message); });
+  }
+
+  function downloadCSV() {
+    if (typeof CSV === 'undefined') return toast('Recurso de CSV indisponível.');
+    var list = cards();
+    if (!list.length) return toast('Não há cartões para exportar.');
+    var rows = list.map(function (c) {
+      return {
+        front: RichText.strip(c.front),
+        back: RichText.strip(c.back),
+        notes: RichText.strip(c.notes || '')
+      };
+    });
+    var url = URL.createObjectURL(new Blob([CSV.toCSV(rows)], { type: 'text/csv;charset=utf-8' }));
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'anki-ingles-cartoes-' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    toast(rows.length + (rows.length === 1 ? ' cartão baixado em CSV.' : ' cartões baixados em CSV.'));
+  }
+
+  function addCardsFromRows(rows) {
+    var existing = {};
+    cards().forEach(function (c) {
+      existing[RichText.strip(c.front).toLowerCase().replace(/\s+/g, ' ')] = true;
+    });
+    var ids = [];
+    rows.forEach(function (row) {
+      var key = row.front.toLowerCase().replace(/\s+/g, ' ');
+      if (existing[key]) return;
+      existing[key] = true;
+      var created = SRS.newCard(uid(), row.front, row.back, row.notes || '');
+      cards().push(created);
+      ids.push(created.id);
+    });
+    if (ids.length) {
+      save(); renderDeckSwitcher(); renderCards();
+      notifyCardsAdded(ids); syncAudios();
+    }
+    return { ids: ids, duplicates: rows.length - ids.length };
+  }
+
+  function openImportTextModal() {
+    openModal(
+      '<h2>Importar frases</h2>' +
+      '<p class="help">Cole uma lista com <strong>inglês :: português</strong>, tab, hífen, seta, <code>|</code> ou <code>=</code>. ' +
+      'Também aceita uma frase por linha alternando os idiomas. Marcadores e duplicatas são tratados automaticamente.</p>' +
+      '<div class="field"><textarea id="importtext-text" rows="8" ' +
+        'placeholder="How are you? :: Como vai?\nI am fine - Estou bem\nThank you → Obrigado"></textarea></div>' +
+      '<div id="importtext-preview" class="import-preview"></div>' +
+      '<div class="modal-actions">' +
+        '<button id="importtext-cancel" class="btn btn-ghost">Cancelar</button>' +
+        '<button id="importtext-file" class="btn btn-ghost">Escolher arquivo CSV</button>' +
+        '<button id="importtext-add" class="btn btn-primary">Adicionar cartões</button>' +
+      '</div>'
+    );
+    var textarea = $('importtext-text');
+    var preview = $('importtext-preview');
+
+    function updatePreview() {
+      var out = ImportText.parse(textarea.value);
+      if (!out.cards.length) {
+        preview.innerHTML = '<span class="muted">Cole as frases acima para ver a prévia.</span>';
+        preview.classList.add('muted-text');
+        return;
+      }
+      preview.classList.remove('muted-text');
+      preview.innerHTML = '<strong>' + out.cards.length + ' cartão(ões)</strong>' +
+        (out.skipped.length ? ' · ' + out.skipped.length + ' linha(s) ignorada(s)' : '') +
+        '<div class="import-preview-list">' + out.cards.slice(0, 4).map(function (c) {
+          return '<div>' + esc(c.front) + ' <span class="muted">→</span> ' + esc(c.back) + '</div>';
+        }).join('') + '</div>';
+    }
+
+    textarea.addEventListener('input', updatePreview);
+    updatePreview();
+    $('importtext-cancel').onclick = closeModal;
+    $('importtext-file').onclick = function () { $('csv-file').click(); };
+    $('importtext-add').onclick = function () {
+      var out = ImportText.parse(textarea.value);
+      if (!out.cards.length) return toast('Nenhuma frase válida encontrada.');
+      var result = addCardsFromRows(out.cards);
+      closeModal();
+      if (!result.ids.length) return toast('Todas as frases já existem no deck.');
+      toast(result.ids.length + (result.ids.length === 1 ? ' cartão adicionado!' : ' cartões adicionados!') +
+        (result.duplicates ? ' (' + result.duplicates + ' repetido(s) ignorado(s))' : ''));
+    };
+    textarea.focus();
+  }
+
+  function readCSVFile(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var rows;
+      try {
+        rows = CSV.parse(reader.result);
+      } catch (err) {
+        toast('Erro no CSV: ' + err.message);
+        return;
+      }
+      if (!rows.length) return toast('Nenhum cartão válido encontrado no CSV.');
+      openCSVImportModal(rows, file.name);
+    };
+    reader.onerror = function () { toast('Não foi possível ler o arquivo.'); };
+    reader.readAsText(file, 'utf-8');
+  }
+
+  function openCSVImportModal(rows, filename) {
+    openModal(
+      '<h2>Importar CSV</h2>' +
+      '<p class="help">' + rows.length + ' cartão(ões) encontrados em ' + esc(filename) + '.</p>' +
+      '<p class="help"><strong>Adicionar</strong> mantém os cartões atuais e cria novos. ' +
+      '<strong>Substituir</strong> apaga os cartões atuais deste deck. ' +
+      'O progresso de estudo dos cartões importados recomeça.</p>' +
+      '<div class="modal-actions">' +
+        '<button id="csv-cancel" class="btn btn-ghost">Cancelar</button>' +
+        '<button id="csv-replace" class="btn btn-ghost">Substituir</button>' +
+        '<button id="csv-add" class="btn btn-primary">Adicionar</button>' +
+      '</div>'
+    );
+    $('csv-cancel').onclick = closeModal;
+    $('csv-add').onclick = function () {
+      var result = addCardsFromRows(rows);
+      closeModal();
+      if (!result.ids.length) return toast('Todas as frases já existem no deck.');
+      toast(result.ids.length + (result.ids.length === 1 ? ' cartão adicionado!' : ' cartões adicionados!') +
+        (result.duplicates ? ' (' + result.duplicates + ' repetido(s) ignorado(s))' : ''));
+    };
+    $('csv-replace').onclick = function () {
+      if (!confirm('Substituir os ' + cards().length + ' cartões atuais por ' + rows.length + ' do CSV?')) return;
+      deck().cards = rows.map(function (row) { return SRS.newCard(uid(), row.front, row.back, row.notes); });
+      save(); closeModal(); renderDeckSwitcher(); renderCards(); renderStats(); renderSettings();
+      session = null; startSession(settings().free, true);
+      syncAudios();
+      toast('Deck substituído por ' + rows.length + ' cartões.');
+    };
   }
 
   function openImportDeckModal() {
@@ -702,56 +950,50 @@
   /* ------------------ Estatísticas e configurações ------------------ */
 
   function renderStats() {
-    var s = stats();
-    var total = s.totalReviews;
-    var today = s.history[todayKey()] || { again: 0, hard: 0, good: 0, easy: 0 };
-    var todayTotal = today.again + today.hard + today.good + today.easy;
-    var learned = cards().filter(function (c) { return c.reps > 0; }).length;
-    var newToday = cards().filter(function (c) {
-      return todayKey(new Date(c.created || c.due)) === todayKey();
-    }).length;
-    var accuracy = total ? Math.round(((total - (sumField('again'))) / total) * 100) : 0;
+    var s = Stats.summary(cards(), stats(), settings());
 
     var boxes = [
-      ['Cartões no deck', cards().length],
-      ['Para revisar hoje', dueCount()],
-      ['Cartões novos hoje', newToday],
-      ['Cartões aprendidos', learned],
-      ['Avaliações hoje', todayTotal],
-      ['Avaliações no total', total],
-      ['Precisão', accuracy + '%']
+      ['Retenção', s.retention + '%', s.totalReviews + ' revisões no total'],
+      ['Sequência', s.streak + (s.streak === 1 ? ' dia' : ' dias'), 'Hoje: ' + s.todayReviews + '/' + s.dailyLimit],
+      ['Memorizados', s.memorized, 'Revisões ' + Stats.MATURE_DAYS + ' dias'],
+      ['Total de Cartões', s.totalCards, s.due + ' para revisar']
     ];
     $('stat-cards').innerHTML = boxes.map(function (b) {
-      return '<div class="stat-box"><div class="value">' + b[1] + '</div><div class="label">' + b[0] + '</div></div>';
+      return '<div class="stat-box">' +
+        '<div class="stat-title">' + esc(b[0]) + '</div>' +
+        '<div class="value">' + esc(b[1]) + '</div>' +
+        '<div class="label">' + esc(b[2]) + '</div>' +
+      '</div>';
     }).join('');
 
-    var days = [];
-    var weekday = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
-    for (var i = 6; i >= 0; i--) {
-      var d = new Date();
-      d.setHours(0, 0, 0, 0);
-      d.setDate(d.getDate() - i);
-      var h = s.history[todayKey(d)] || {};
-      days.push({
-        label: weekday[d.getDay()],
-        total: (h.again || 0) + (h.hard || 0) + (h.good || 0) + (h.easy || 0)
-      });
-    }
-    var max = Math.max.apply(null, days.map(function (x) { return x.total; }).concat([1]));
-    $('chart').innerHTML = days.map(function (x) {
-      var height = Math.max(2, Math.round((x.total / max) * 120));
-      return '<div class="chart-col"><span class="chart-num">' + (x.total || '') + '</span>' +
-        '<div class="chart-bar" style="height:' + height + 'px"></div>' +
-        '<span class="chart-day">' + x.label + '</span></div>';
-    }).join('');
-  }
+    $('chart-total').textContent = s.chart.total +
+      (s.chart.total === 1 ? ' cartão revisado' : ' cartões revisados');
+    $('chart-ymax').textContent = s.chart.max;
 
-  function sumField(field) {
-    var n = 0;
-    Object.keys(stats().history).forEach(function (k) {
-      n += stats().history[k][field] || 0;
-    });
-    return n;
+    function barHeight(n) { return Math.max(2, Math.round((n / s.chart.max) * 128)); }
+    $('chart').innerHTML = s.chart.days.map(function (d) {
+      return '<div class="chart-col">' +
+        '<div class="chart-bars">' +
+          '<div class="chart-bar total" style="height:' + barHeight(d.total) + 'px" title="' + d.total + ' revisões"></div>' +
+          '<div class="chart-bar hits" style="height:' + barHeight(d.hits) + 'px" title="' + d.hits + ' acertos"></div>' +
+        '</div>' +
+        '<span class="chart-day">' + esc(d.label) + '</span>' +
+      '</div>';
+    }).join('');
+
+    var dist = s.distribution;
+    var rows = [
+      ['novos', 'Novos', dist.novos],
+      ['estudo', 'Em estudo', dist.estudo],
+      ['memorizados', 'Bem memorizados', dist.memorizados]
+    ];
+    $('card-distribution').innerHTML = rows.map(function (r) {
+      var pct = s.totalCards ? Math.round((r[2] / s.totalCards) * 100) : 0;
+      return '<div class="dist-row">' +
+        '<div class="dist-head"><b>' + r[1] + '</b><span>' + r[2] + '</span></div>' +
+        '<div class="dist-track"><div class="dist-fill ' + r[0] + '" style="width:' + pct + '%"></div></div>' +
+      '</div>';
+    }).join('');
   }
 
   function renderSettings() {
@@ -836,7 +1078,18 @@
     $('btn-deck-delete').onclick = deleteDeckModal;
     $('btn-deck-import').onclick = openImportDeckModal;
 
-    $('btn-free').onclick = function () { startSession(true); toast('Modo livre ativado.'); };
+    $('btn-listening').onclick = function () { startMode('listening'); };
+    $('btn-quiz').onclick = function () { startMode('quiz'); };
+    $('btn-hard').onclick = function () { startMode('hardOnly'); };
+
+    $('btn-free').onclick = function () {
+      var active = !(session && session.free);
+      settings().free = active;
+      save();
+      $('set-free').checked = active;
+      startSession(active);
+      toast(active ? 'Modo livre ativado.' : 'Modo livre desativado.');
+    };
     $('btn-end').onclick = function () { if (session) finishSession(true); };
     $('btn-empty-free').onclick = function () { startSession(true); toast('Modo livre ativado.'); };
     $('btn-empty-add').onclick = function () { showScreen('cards'); openCardModal(null); };
@@ -854,8 +1107,13 @@
 
     $('card-search').addEventListener('input', renderCards);
     $('btn-new').onclick = function () { openCardModal(null); };
-    $('btn-import').onclick = openImportModal;
-    $('btn-export').onclick = exportCards;
+    $('btn-csv-export').onclick = downloadCSV;
+    $('btn-csv-import').onclick = openImportTextModal;
+    $('csv-file').onchange = function (e) {
+      var file = e.target.files && e.target.files[0];
+      if (file) readCSVFile(file);
+      e.target.value = '';
+    };
 
     $('cards-list').addEventListener('click', function (e) {
       var speakId = e.target.getAttribute('data-speak-card');
@@ -870,10 +1128,14 @@
       if (delId) {
         var target = getCard(delId);
         if (!target) return;
-        if (!confirm('Excluir o cartão:\n"' + RichText.strip(target.front) + '"?')) return;
+        var index = cards().indexOf(target);
+        var deckId = deck().id;
         deck().cards = cards().filter(function (c) { return c.id !== delId; });
         save(); renderDeckSwitcher(); renderCards(); notifyCardsRemoved([delId]);
-        toast('Cartão excluído.');
+        toast('Cartão excluído.', {
+          label: 'Desfazer',
+          onClick: function () { undoDelete(deckId, index, target); }
+        });
       }
     });
 
@@ -1077,6 +1339,13 @@
       var key = e.key;
       if (key === 'r' || key === 'R') { speakCurrent(); return; }
       if (!session || !session.queue.length) return;
+
+      if (session.quiz) {
+        var idx = ['1', '2', '3', '4'].indexOf(key);
+        if (idx >= 0 && session.quizOptions) { answerQuiz(idx, session.quizOptions); return; }
+        if (key === ' ' || key === 'Enter') return;
+      }
+
       var flipped = $('flashcard').classList.contains('flipped');
 
       if (key === ' ' || key === 'Enter') {
