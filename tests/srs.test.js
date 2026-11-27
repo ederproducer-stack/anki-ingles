@@ -4,6 +4,7 @@ const SRS = require('../srs.js');
 
 const NOW = new Date('2026-11-20T12:00:00Z').getTime();
 const DAY = SRS.DAY;
+const inicioDoDia = ts => { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); };
 
 test('cartão novo nasce disponível, com ef 2.5 e sem repetições', () => {
   const c = SRS.newCard('id', 'Hello', 'Olá');
@@ -17,7 +18,7 @@ test('Bom segue a sequência 1 dia → 6 dias → intervalo × facilidade', () =
   let c = SRS.newCard('id', 'Hi', 'Oi');
   c = SRS.schedule(c, 'good', NOW).card;
   assert.equal(c.interval, 1);
-  assert.equal(c.due, NOW + 1 * DAY);
+  assert.equal(c.due, inicioDoDia(NOW) + 1 * DAY);
   assert.equal(c.reps, 1);
 
   c = SRS.schedule(c, 'good', NOW).card;
@@ -78,7 +79,7 @@ test('Fácil sempre resulta em intervalo maior que Bom', () => {
   estados.forEach((card, i) => {
     const bom = SRS.schedule(card, 'good', NOW).card.interval;
     const facil = SRS.schedule(card, 'easy', NOW).card.interval;
-    assert.ok(facil > bom, `estado ${i}: fácil (${facil}) deve ser > bom (${bom})`);
+    assert.ok(facil >= bom, `estado ${i}: fácil (${facil}) não pode ser menor que bom (${bom})`);
   });
 });
 
@@ -87,6 +88,43 @@ test('a facilidade nunca desce abaixo de 1.3', () => {
   c.ef = 1.3;
   for (let i = 0; i < 20; i++) c = SRS.schedule(c, 'again', NOW).card;
   assert.equal(c.ef, 1.3);
+});
+
+test('vencimento cai na virada do dia, não 24h após a avaliação', () => {
+  const agora = new Date(2026, 10, 26, 10, 13, 0).getTime();
+  const novo = SRS.newCard('id', 'Hi', 'Oi');
+  const umDia = SRS.schedule(novo, 'good', agora, () => 0.5).card;
+  assert.equal(umDia.due, new Date(2026, 10, 27, 0, 0, 0).getTime());
+
+  let seis = novo;
+  seis = SRS.schedule(seis, 'good', agora, () => 0.5).card;
+  seis = SRS.schedule(seis, 'good', agora, () => 0.5).card;
+  assert.equal(seis.interval, 6);
+  assert.equal(seis.due, new Date(2026, 11, 2, 0, 0, 0).getTime());
+});
+
+test('intervalo nunca passa de 30 dias', () => {
+  assert.equal(SRS.MAX_INTERVAL, 30);
+  let c = SRS.newCard('id', 'Hi', 'Oi');
+  c.interval = 95; c.reps = 5; c.ef = 2.5;
+  const r = SRS.schedule(c, 'easy', NOW, () => 0.5);
+  assert.equal(r.card.interval, 30);
+});
+
+test('jitter espalha o vencimento sem mudar o intervalo exibido', () => {
+  const base = SRS.newCard('id', 'Hi', 'Oi');
+  base.interval = 10; base.reps = 5; base.ef = 2.5;
+  const cedo = SRS.schedule(base, 'good', NOW, () => 0).card;
+  const tarde = SRS.schedule(base, 'good', NOW, () => 1).card;
+  assert.equal(cedo.interval, tarde.interval);
+  assert.equal(cedo.interval, 25);
+  assert.ok(tarde.due > cedo.due);
+});
+
+test('intervalos curtos não recebem jitter', () => {
+  const c = SRS.schedule(SRS.newCard('id', 'Hi', 'Oi'), 'good', NOW, () => 1).card;
+  assert.equal(c.interval, 1);
+  assert.equal(c.due, inicioDoDia(NOW) + DAY);
 });
 
 test('avaliação inválida lança erro', () => {
@@ -103,5 +141,5 @@ test('formatInterval gera rótulos legíveis', () => {
   c = SRS.schedule(c, 'good', NOW).card; // 15 dias
   assert.equal(c.interval, 15);
   assert.equal(SRS.formatInterval(c, 'good'), '1 mês'); // 15 * 2.5 = 38 dias
-  assert.equal(SRS.formatInterval({ interval: 90, reps: 3, ef: 2.5 }, 'good'), '8 meses');
+  assert.equal(SRS.formatInterval({ interval: 90, reps: 3, ef: 2.5 }, 'good'), '1 mês');
 });

@@ -6,7 +6,7 @@ const Stats = globalThis.Stats;
 const NOW = new Date(2026, 10, 26, 10, 0, 0); // quinta-feira
 
 test('a API de estatísticas expõe as funções esperadas', () => {
-  ['dayKey', 'totals', 'counts', 'retention', 'streak', 'distribution', 'difficulty', 'hardCards', 'chart', 'summary']
+  ['dayKey', 'totals', 'counts', 'retention', 'streak', 'distribution', 'difficulty', 'hardCards', 'resetCards', 'emptyStats', 'chart', 'summary']
     .forEach(name => assert.equal(typeof Stats[name], 'function', name));
 });
 
@@ -76,6 +76,24 @@ test('hardCards ordena os mais difíceis e aplica limite', () => {
   ];
   assert.deepEqual(Stats.hardCards(cards, 2).map(c => c.id), ['b', 'c']);
   assert.deepEqual(Stats.hardCards(cards).map(c => c.id), ['b', 'c']);
+});
+
+test('resetCards zera o progresso mas preserva o conteúdo do cartão', () => {
+  const agora = 1000;
+  const cards = [{
+    id: 'a', front: 'Hi', back: 'Oi', notes: 'nota', created: 500,
+    reps: 9, interval: 238, ef: 3, due: 900000, lapses: 4, lastReviewed: 800
+  }];
+  const out = Stats.resetCards(cards, agora);
+  assert.deepEqual(out[0], {
+    id: 'a', front: 'Hi', back: 'Oi', notes: 'nota', created: 500,
+    reps: 0, interval: 0, ef: 2.5, due: 1000, lapses: 0, lastReviewed: null
+  });
+  assert.equal(cards[0].reps, 9, 'não altera os cartões originais');
+});
+
+test('emptyStats reinicia contadores e histórico', () => {
+  assert.deepEqual(Stats.emptyStats(), { totalReviews: 0, history: {} });
 });
 
 test('chart traz 7 dias com totais, acertos e rótulos em português', () => {

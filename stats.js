@@ -67,6 +67,24 @@
     return out;
   }
 
+  function resetCards(cards, now) {
+    now = now || Date.now();
+    return (cards || []).map(function (c) {
+      return Object.assign({}, c, {
+        reps: 0,
+        interval: 0,
+        ef: 2.5,
+        due: now,
+        lapses: 0,
+        lastReviewed: null
+      });
+    });
+  }
+
+  function emptyStats() {
+    return { totalReviews: 0, history: {} };
+  }
+
   function chart(history, now, count) {
     now = now || new Date();
     count = count || 7;
@@ -134,6 +152,8 @@
     distribution: distribution,
     difficulty: difficulty,
     hardCards: hardCards,
+    resetCards: resetCards,
+    emptyStats: emptyStats,
     chart: chart,
     summary: summary
   };

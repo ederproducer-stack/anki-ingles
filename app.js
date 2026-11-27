@@ -1040,6 +1040,22 @@
     $('backup-auto-row').classList.toggle('hidden', (!status.supported || !status.folder) && !status.serverPath);
   }
 
+  function resetStudy() {
+    if (!confirm('Zerar TODO o progresso de estudo? Cartões e baralhos serão mantidos, mas repetições, intervalos e estatísticas voltam ao zero. Isso não pode ser desfeito.')) return;
+    Decks.getDecks().forEach(function (d) {
+      d.cards = Stats.resetCards(d.cards);
+      d.stats = Stats.emptyStats();
+    });
+    save();
+    session = null;
+    startSession(settings().free, true);
+    renderDeckSwitcher(); renderCards(); renderStats(); renderSettings();
+    if (globalBackup()) {
+      globalBackup().countAudios(deck()).then(function () { renderBackupStatus(); });
+    }
+    toast('Estudo reiniciado. Cartões e baralhos preservados.');
+  }
+
   function restoreBackup(text) {
     var data;
     try {
@@ -1319,6 +1335,8 @@
       });
     };
 
+    $('btn-reset-study').onclick = resetStudy;
+
     $('btn-reset').onclick = function () {
       if (!confirm('Isso apaga TODOS os cartões e estatísticas do deck "' + deck().name + '". Continuar?')) return;
       deck().cards = SEED_DECK.map(function (item) {
@@ -1364,7 +1382,20 @@
   /* ------------------ Init ------------------ */
 
   Decks.load();
+  var normalizedIntervals = Decks.getNormalizedCount();
+  var alignedDates = Decks.getAlignedCount();
   bindEvents();
+  // O navegador pode restaurar o DOM anterior (bfcache) ao reabrir a aba,
+  // inclusive com a sessão encerrada. Na primeira carga a sessão já foi iniciada
+  // acima; nas voltas seguintes, recomeça uma sessão em Revisar.
+  var primeiraCarga = true;
+  window.addEventListener('pageshow', function () {
+    showScreen('study');
+    if (primeiraCarga) { primeiraCarga = false; return; }
+    TTS.stop();
+    session = null;
+    startSession(settings().free, true);
+  });
   renderDeckSwitcher();
   renderSettings();
   renderCards();
@@ -1377,5 +1408,11 @@
       renderBackupStatus();
       syncAudios();
     });
+  }
+  if (normalizedIntervals || alignedDates) {
+    var avisos = [];
+    if (alignedDates) avisos.push(alignedDates + ' vencimento(s) ajustado(s) para 00:00');
+    if (normalizedIntervals) avisos.push(normalizedIntervals + ' intervalo(s) limitado(s) a 30 dias');
+    toast(avisos.join(' • ') + '.');
   }
 })();

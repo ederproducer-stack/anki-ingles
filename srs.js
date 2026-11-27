@@ -9,6 +9,20 @@
   var MINUTE = 60 * 1000;
   var MIN_EF = 1.3;
   var MAX_EF = 3.0;
+  var MAX_INTERVAL = 30;   // dias — sem isso o intervalo cresce para 200+ dias
+  var JITTER_RATIO = 0.12; // espalha o vencimento para não juntar todos os cartões
+
+  function dayStart(ts) {
+    var d = new Date(ts || Date.now());
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+
+  function jitterDays(interval, rng) {
+    if (interval < 7) return 0;
+    var spread = Math.max(1, Math.round(interval * JITTER_RATIO));
+    return Math.round((rng() * 2 - 1) * spread);
+  }
 
   function clamp(x, lo, hi) { return Math.min(hi, Math.max(lo, x)); }
 
@@ -33,11 +47,11 @@
    * Avalia o cartão. Retorna { card, requeue }.
    * ratings: 'again' | 'hard' | 'good' | 'easy'
    */
-  function schedule(card, rating, now) {
+  function schedule(card, rating, now, rng) {
     now = now || Date.now();
+    rng = rng || Math.random;
     var c = Object.assign({}, card);
     c.lastReviewed = now;
-    var requeue = false;
 
     switch (rating) {
       case 'again':
@@ -47,15 +61,13 @@
         c.interval = 0;
         c.ef = clamp(c.ef - 0.20, MIN_EF, 2.5);
         c.due = now + MINUTE;
-        requeue = true;
-        break;
+        return { card: c, requeue: true };
 
       case 'hard':
         // Lembrou com esforço: avança pouco, mas ainda conta como revisão.
         c.interval = Math.max(1, Math.round((c.interval > 0 ? c.interval : 1) * 1.2));
         c.ef = clamp(c.ef - 0.15, MIN_EF, 2.5);
         c.reps += 1;
-        c.due = now + c.interval * DAY;
         break;
 
       case 'good':
@@ -64,7 +76,6 @@
         else if (c.reps === 1) c.interval = 6;
         else c.interval = Math.max(1, Math.round(c.interval * c.ef));
         c.reps += 1;
-        c.due = now + c.interval * DAY;
         break;
 
       case 'easy':
@@ -74,14 +85,16 @@
         else c.interval = Math.max(1, Math.round(c.interval * c.ef * 1.3));
         c.ef = clamp(c.ef + 0.15, MIN_EF, MAX_EF);
         c.reps += 1;
-        c.due = now + c.interval * DAY;
         break;
 
       default:
         throw new Error('Avaliação inválida: ' + rating);
     }
 
-    return { card: c, requeue: requeue };
+    c.interval = clamp(Math.round(c.interval), 1, MAX_INTERVAL);
+    // Vence sempre na virada do dia, não 24h após a avaliação.
+    c.due = dayStart(now) + Math.max(1, c.interval + jitterDays(c.interval, rng)) * DAY;
+    return { card: c, requeue: false };
   }
 
   function formatInterval(card, rating, now) {
@@ -101,9 +114,12 @@
   var api = {
     DAY: DAY,
     MINUTE: MINUTE,
+    MAX_INTERVAL: MAX_INTERVAL,
+    dayStart: dayStart,
     newCard: newCard,
     schedule: schedule,
-    formatInterval: formatInterval
+    formatInterval: formatInterval,
+    jitterDays: jitterDays
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

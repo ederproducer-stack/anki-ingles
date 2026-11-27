@@ -11,6 +11,9 @@
   var DB_NAME = 'anki-ingles-backup';
 
   var state = null;
+  var MAX_INTERVAL = (typeof SRS !== 'undefined' && SRS.MAX_INTERVAL) || 30;
+  var normalizedCount = 0;
+  var alignedCount = 0;
 
   function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -40,7 +43,7 @@
   }
 
   function normalizeCard(c) {
-    return {
+    var out = {
       id: c.id || uid(),
       front: c.front,
       back: c.back,
@@ -53,6 +56,22 @@
       created: c.created || Date.now(),
       lastReviewed: c.lastReviewed || null
     };
+    // Normalização única de intervalos antigos (antes não havia teto).
+    if (out.interval > MAX_INTERVAL) {
+      out.interval = MAX_INTERVAL;
+      var day = (typeof SRS !== 'undefined' && SRS.DAY) || 86400000;
+      var offset = (typeof SRS !== 'undefined' && SRS.jitterDays)
+        ? SRS.jitterDays(MAX_INTERVAL, Math.random) : 0;
+      var base = out.lastReviewed || out.created || Date.now();
+      var start = (typeof SRS !== 'undefined' && SRS.dayStart) ? SRS.dayStart(base) : base;
+      out.due = start + Math.max(1, MAX_INTERVAL + offset) * day;
+      normalizedCount++;
+    }
+    if (typeof SRS !== 'undefined' && SRS.dayStart && typeof out.due === 'number') {
+      var alinhado = SRS.dayStart(out.due);
+      if (alinhado !== out.due) { out.due = alinhado; alignedCount++; }
+    }
+    return out;
   }
 
   function normalizeDeck(d) {
@@ -94,6 +113,8 @@
   }
 
   function load() {
+    normalizedCount = 0;
+    alignedCount = 0;
     try {
       var raw = localStorage.getItem(KEY);
       if (raw) {
@@ -105,6 +126,7 @@
             settings: Object.assign(defaultSettings(), parsed.settings || {})
           };
           if (!getActive()) state.activeDeckId = state.decks[0].id;
+          if (normalizedCount || alignedCount) save();
           return state;
         }
       }
@@ -223,7 +245,9 @@
     importDeck: importDeck,
     newDeck: newDeck,
     defaultSettings: defaultSettings,
-    normalizeCard: normalizeCard
+    normalizeCard: normalizeCard,
+    getNormalizedCount: function () { return normalizedCount; },
+    getAlignedCount: function () { return alignedCount; }
   };
   global.Decks = api;
 })(typeof window !== 'undefined' ? window : globalThis);

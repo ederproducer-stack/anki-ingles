@@ -34,13 +34,13 @@ python3 server.py 8080
 1. Na aba **Revisar**, a frase em inglês aparece e a voz já é reproduzida (se a opção estiver ligada). Use o botão 🔊 ou a tecla `R` para ouvir de novo.
 2. Clique em **Mostrar resposta** (ou `Espaço`) para virar o cartão e ver a tradução em português.
 3. Avalie com `De novo` / `Difícil` / `Bom` / `Fácil` (ou teclas `1` `2` `3` `4`). O intervalo até a próxima revisão aparece em cada botão.
-4. A repetição espaçada é uma versão simplificada do SM-2 (o algoritmo do Anki): `De novo` volta o cartão para a mesma sessão; `Bom` segue 1 dia → 6 dias → intervalo × facilidade.
+4. A repetição espaçada é uma versão simplificada do SM-2 (o algoritmo do Anki): `De novo` volta o cartão para a mesma sessão; `Bom` segue 1 dia → 6 dias → intervalo × facilidade. O vencimento cai sempre na **virada do dia (00:00)**, nunca 24 horas após a avaliação — um cartão avaliado hoje às 10:13 com `Bom` volta amanhã às 00:00. O intervalo tem **teto de 30 dias** e recebe uma pequena variação aleatória no vencimento para os cartões não caírem todos no mesmo dia. Cartões com intervalos antigos acima de 30 dias são reagendados automaticamente na primeira abertura, com aviso na tela.
 
 Outras abas:
 - **Cartões**: adicionar, editar, excluir (com **Desfazer** no aviso), buscar e trocar cartões com planilhas.
   - **Importar** abre a colagem inteligente de frases (ou escolha de CSV); **Baixar** gera o CSV (veja abaixo).
 - **Estatísticas**: retenção, sequência de dias, memorizados, total de cartões, gráfico dos últimos 7 dias (com acertos) e distribuição dos cartões.
-- **Configurações**: voz automática, velocidade, limites diários, modo livre, backup, atualização e um bloco com descrição e créditos do app.
+- **Configurações**: voz automática, velocidade, limites diários, modo livre, backup, atualização, **Reiniciar estudo** (zera progresso e estatísticas sem apagar cartões nem baralhos) e um bloco com descrição e créditos do app.
 
 ## Modos de treino
 

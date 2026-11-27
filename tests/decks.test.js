@@ -25,6 +25,55 @@ test('estado novo começa com um deck e 30 frases de exemplo', () => {
   assert.equal(Decks.getActive().name, 'Inglês básico');
 });
 
+test('ao carregar, intervalos acima de 30 dias são normalizados uma vez', () => {
+  for (const k of Object.keys(store)) delete store[k];
+  const now = Date.now();
+  const last = now - 2 * 86400000;
+  store['anki-ingles-v2'] = JSON.stringify({
+    decks: [{
+      id: 'd1', name: 'Meu deck',
+      cards: [{
+        id: 'c1', front: 'Hi', back: 'Oi', reps: 6, interval: 238, ef: 2.5,
+        due: now + 200 * 86400000, lastReviewed: last, lapses: 0, created: last
+      }],
+      stats: { totalReviews: 6, history: {} }
+    }],
+    activeDeckId: 'd1', settings: {}
+  });
+  Decks.load();
+  const c = Decks.getActive().cards[0];
+  assert.equal(c.interval, 30);
+  assert.equal(new Date(c.due).getHours(), 0);
+  assert.ok(c.due >= last + 25 * 86400000);
+  assert.ok(c.due <= last + 34 * 86400000);
+  assert.equal(Decks.getNormalizedCount(), 1);
+  Decks.load();
+  assert.equal(Decks.getNormalizedCount(), 0);
+});
+
+test('ao carregar, vencimentos existentes passam para a meia-noite', () => {
+  for (const k of Object.keys(store)) delete store[k];
+  const revisado = new Date(2026, 10, 26, 10, 13, 0).getTime();
+  const vence = new Date(2026, 10, 27, 10, 13, 0).getTime();
+  store['anki-ingles-v2'] = JSON.stringify({
+    decks: [{
+      id: 'd1', name: 'Meu deck',
+      cards: [{
+        id: 'c1', front: 'Hi', back: 'Oi', reps: 1, interval: 1, ef: 2.5,
+        due: vence, lastReviewed: revisado, lapses: 0, created: revisado
+      }],
+      stats: { totalReviews: 1, history: {} }
+    }],
+    activeDeckId: 'd1', settings: {}
+  });
+  Decks.load();
+  const c = Decks.getActive().cards[0];
+  assert.equal(c.due, new Date(2026, 10, 27, 0, 0, 0).getTime());
+  assert.equal(Decks.getAlignedCount(), 1);
+  Decks.load();
+  assert.equal(Decks.getAlignedCount(), 0);
+});
+
 test('criar deck vazio e trocar o ativo', () => {
   for (const k of Object.keys(store)) delete store[k];
   Decks.load();
